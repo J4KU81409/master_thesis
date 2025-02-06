@@ -10,6 +10,6 @@ tickers = tickers_df['Symbol']
 print(tickers)
 
 
-stock_data = {}
-#stock_data['apple'] = yf.download('AAPL',period="1y")
-#print(stock_data)
+stock_data = []
+stock_data = yf.download(['AAPL','MSFT'],period="1y")
+print(stock_data)
