@@ -7,6 +7,9 @@ import math
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from itertools import combinations
+import sys
+import os
+from datetime import datetime
 
 
 ### Formation period functions ### 
@@ -35,7 +38,7 @@ def calculate_and_sort_ssd(stocks: pd.DataFrame) -> pd.DataFrame:
     stock_pairs = list(combinations(stocks.columns, 2))  # Unique stock pairs
     ssd_values = {}
 
-    for ticker1, ticker2 in tqdm(stock_pairs, desc="Calculating SSDs"):
+    for ticker1, ticker2 in stock_pairs:
         
         # Assign stock price series 
         stock1, stock2 = stocks[ticker1], stocks[ticker2]
@@ -157,8 +160,12 @@ def calculate_portfolio_spread(stocks: pd.DataFrame, portfolio: pd.DataFrame) ->
         spread_df_normalized[pair] = spread_normalized
 
     return spread_df, spread_df_normalized
+import sys
+import os
+from datetime import datetime
 
-def trade_portfolio(spread_df: pd.DataFrame, spread_df_normalized: pd.DataFrame) -> pd.DataFrame:
+
+def trade_portfolio(spread_df: pd.DataFrame, spread_df_normalized: pd.DataFrame, useTransactionCosts: bool = False, transaction_cost: float = 0.006) -> pd.DataFrame:
     """
     Calculates the trading period spread of the selected pairs from the formation period
     Also calculate the normalized spread using the portfolio parameters.
@@ -166,17 +173,20 @@ def trade_portfolio(spread_df: pd.DataFrame, spread_df_normalized: pd.DataFrame)
     Parameters: 
     spread_df: the trading period spread of the 20 pairs (6 months)
     spread_df_normalized: the trading period spread normalized of the 20 pairs (6 months)
+    useTransactionCosts: indicator whether transaction costs should be applied
+    transaction_cost: estimated transaction cost (market impact + commission fee), multiplied by two
 
     Returns: 
-    DataFrame containing the returns (from period t to t+n) if a trade was entered and exited.
+    DataFrame containing the returns (from period t to t+n) for all 20 pairs.
+    and a df of trade counts for that period
     """
     result_df = pd.DataFrame(index = spread_df.index)
+    trade_counts_df = pd.DataFrame(index = spread_df.index)
     n_diverged = 0
     
     for pair, pair_norm in zip(spread_df.columns,spread_df_normalized.columns):
         pair_result = {}
         entered_trade = False
-        round_trip_count = 0
         print("proccesing pair: \n",  pair, "\n", 100*"-")
         
         # Direction variable 1 long -1 short 
@@ -203,12 +213,11 @@ def trade_portfolio(spread_df: pd.DataFrame, spread_df_normalized: pd.DataFrame)
                 print("Short Trade was exited...")    
                 entered_trade = False   # exit trade
                 delta_spread = abs(spread_current - spread_t) # return = delta spread
-                round_trip_count +=1 # trade count
             elif direction == 1 and spread_norm_current >= 0 and entered_trade: 
                 print("Long Trade was exited...")    
                 entered_trade = False   # exit trade
                 delta_spread = abs(spread_current - spread_t)
-                round_trip_count +=1
+                
             else: 
                 # if trade is not entered or spread of the entered trade did not return to 0
                 delta_spread = 0.0 
@@ -226,26 +235,37 @@ def trade_portfolio(spread_df: pd.DataFrame, spread_df_normalized: pd.DataFrame)
                     elif direction == -1:  # short
                         delta_spread = -spread_diff
                     
-                    print("Final delta_spread:", delta_spread)
                     # Convert to absolute profit/loss value
                     delta_spread = abs(delta_spread) if delta_spread >= 0 else -abs(delta_spread)
+                    print("Final delta_spread:", delta_spread)
                     
                     if delta_spread < 0:
                         n_diverged += 1 
                    
             # Save the delta spread
-            pair_result[date] = delta_spread
+            if useTransactionCosts and delta_spread != 0:
+                pair_result[date] =  delta_spread - transaction_cost 
+            else: 
+                pair_result[date] = delta_spread
         
         # append to result df 
         result_df[pair] = pair_result
-        print("\n number of completed round trip trades: ", round_trip_count, "\n",100*"-")    
+        trade_counts_df[pair] = [1 if r != 0.0 else 0 for r in pair_result.values()]
+
+        print("\n number of completed round trip trades: ", sum(trade_counts_df[pair]), "\n",100*"-")    
     
     print("Trading of the portfolio from ", spread_df.index[0], " to ", spread_df.index[-1], "has finished. \n",
-          "number of diverged pairs for this portfolio =", n_diverged)
-    
-    return result_df
+          "number of diverged pairs for this portfolio =", n_diverged, "\n transaction costs apply:" , useTransactionCosts)
+    return result_df, trade_counts_df
 
-def run_strategy_hossein(stocks: pd.DataFrame):
+def run_strategy_hossein(stocks: pd.DataFrame, useTransactionCosts: bool = False):
+    
+    os.makedirs("logs", exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_filename = f"logs/backtest_cointegration_{timestamp}.log"
+    sys.stdout = open(log_filename, "w")
+
     stocks.index = pd.to_datetime(stocks.index)
     time_frame = stocks.index
 
@@ -253,11 +273,11 @@ def run_strategy_hossein(stocks: pd.DataFrame):
 
     # This is the main dataframe, that stores the daily returns of each portfolio 
     returns_dictionary = {}
-
+    trade_counts_dictionary = {}
     n_trading_periods = 0 
 
     # Iterate through months instead of days
-    for start_idx in range(len(months)):
+    for start_idx in tqdm(range(len(months)), desc="Running Cointegration Backtest"):
 
         formation_start = pd.Timestamp(months[start_idx].start_time)
         formation_end = formation_start + pd.DateOffset(months=24)-pd.DateOffset(days=1)  # 24 months later
@@ -305,16 +325,20 @@ def run_strategy_hossein(stocks: pd.DataFrame):
         # 5. Trade portfolio
         print("\nPortfolio is trading...\n")
         print("=" * 80)
-        result_df = trade_portfolio(spread_df, spread_df_norm)
+        result_df, trade_counts_df = trade_portfolio(spread_df, spread_df_norm, useTransactionCosts= useTransactionCosts)
 
         print(f"Trading End:\n{stocks_trading.index[-1]}\n")
         print("X" * 80)
 
         # 6. Calculate daily returns of each portfolio and append this column for each trading period
         # calculated as a row sums of the daily returns of 20 pairs 
+        # Also sum up the number trades on that day over the 6 portfolios
         returns_dictionary[f"Portfolio_{trading_start}"] = result_df.sum(axis=1)
+        trade_counts_dictionary[f"Portfolio_{trading_start}"] = trade_counts_df.sum(axis=1)
         n_trading_periods += 1
         print("Number of trading periods: ", n_trading_periods) 
-
-    return pd.DataFrame(returns_dictionary)
-
+    
+    sys.stdout.close()
+    sys.stdout = sys.__stdout__
+    print("Done ... logs saved into", log_filename)    
+    return pd.DataFrame(returns_dictionary), pd.DataFrame(trade_counts_dictionary)

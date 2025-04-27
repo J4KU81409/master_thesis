@@ -54,7 +54,7 @@ def estimate_model(stocks_formation, portfolio):
     return portfolio_models
 
 
-def trade_portfolio_kalman(portfolio_models, stocks_trading):
+def trade_portfolio_kalman(portfolio_models: pd.DataFrame, stocks_trading: pd.DataFrame, useTransactionCosts: bool = False, transaction_cost: float = 0.006, threshold_factor: float = 0.1):
     """ 
     This performs the recursive kalman filter based on the parameterss A,B,C,D state-observation model estimated before.
     Takes the trading period stocks and performs the trading algorithm 
@@ -63,10 +63,11 @@ def trade_portfolio_kalman(portfolio_models, stocks_trading):
     x_est_df = pd.DataFrame(index = stocks_trading.index)
     R_est_df = pd.DataFrame(index = stocks_trading.index)
     y_obs_df = pd.DataFrame(index = stocks_trading.index)
-    
-    n_diverged = 0
-    trade_counts = {}
+    trade_counts_df = pd.DataFrame(index = stocks_trading.index)
 
+    n_diverged = 0
+    
+    
     # Process each pair
     for pair in portfolio_models.index:
         entered_trade = False
@@ -75,7 +76,6 @@ def trade_portfolio_kalman(portfolio_models, stocks_trading):
         print("proccesing pair: \n",  pair, "\n", 100*"-")
         A,B,C,D = portfolio_models.loc[pair]
        
-
         # spread for a given pair
         y_obs = np.log(stocks_trading[stock1]/stocks_trading[stock2])
        
@@ -117,14 +117,13 @@ def trade_portfolio_kalman(portfolio_models, stocks_trading):
             print(40*"-", "\nprocessing date", date)
             print("Current observed spread is: ",  y_obs.iloc[i], "and Current filtered spread is", x_est[i])
             # trade logic here, we compare prediction and signal 
-            threshold = np.sqrt(R_hat) * 0.1 # threshold to enter the trade
+            threshold = np.sqrt(R_hat) * threshold_factor # threshold to enter the trade
             
             if observed_y > x_hat + threshold and not entered_trade:
                 #observed spread is too large, enter trade 
                 print("Observed spread ", observed_y ," is too big, short trade entered...")
                 spread_t = observed_y
                 direction = -1
-                n_trades += 1
                 entered_trade = True
             
             elif observed_y < x_hat - threshold and not entered_trade:
@@ -132,7 +131,6 @@ def trade_portfolio_kalman(portfolio_models, stocks_trading):
                 print("Observed spread is too small, long trade entered...")
                 spread_t = observed_y
                 direction = +1
-                n_trades += 1
                 entered_trade = True
 
             # if the spread at time t was higher and 
@@ -173,19 +171,107 @@ def trade_portfolio_kalman(portfolio_models, stocks_trading):
                     if delta_spread < 0:
                         n_diverged += 1
 
-            # Save the delta spread
-            pair_result[date] = delta_spread
-            trade_counts[pair] = n_trades
-            
+            # Save the delta spread, account for transaction costs
+            if useTransactionCosts and delta_spread != 0:
+                pair_result[date] =  delta_spread - transaction_cost 
+            else: 
+                pair_result[date] = delta_spread
+
         # append to result df 
         result_df[pair] = pair_result
+        trade_counts_df[pair] = [1 if r != 0.0 else 0 for r in pair_result.values()]
         x_est_df[pair] = x_est
         R_est_df[pair] = R_est
         y_obs_df[pair] = y_obs
+        print("\n number of completed round trip trades: ", sum(trade_counts_df[pair]), "\n",100*"-")    
 
-    return x_est_df, y_obs_df, R_est_df, result_df, trade_counts
+    return x_est_df, y_obs_df, R_est_df, result_df, trade_counts_df
 
 
+def run_strategy_kalman(stocks: pd.DataFrame, useTransactionCosts: bool = False):
+    
+    os.makedirs("logs", exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_filename = f"logs/backtest_kalman_{timestamp}.log"
+    sys.stdout = open(log_filename, "w")
+    
+    stocks.index = pd.to_datetime(stocks.index)
+    time_frame = stocks.index
+
+    months = pd.Series(time_frame).dt.to_period('M').unique()  # Extract unique months
+
+    # This is the main dataframe, that stores the daily returns of each portfolio 
+    returns_dictionary = {}
+    trade_counts_dictionary = {} 
+
+    n_trading_periods = 0 
+
+    # Iterate through months instead of days
+    for start_idx in tqdm(range(len(months)), desc= "Running Kalman backtest"):
+
+        formation_start = pd.Timestamp(months[start_idx].start_time)
+        formation_end = formation_start + pd.DateOffset(months=24)-pd.DateOffset(days=1)  # 24 months later
+        trading_start = formation_start + pd.DateOffset(months=24)
+        trading_end = formation_end + pd.DateOffset(months=6)  # Next 6 months
+        
+        # Ensure we don't exceed the timeframe
+        if trading_end > time_frame[-1]:
+            break
+        
+        # The backtest algorithm starts here:
+        # 1. normalize the stock data at the start of the formation period to 1$  
+        stocks_normalized = normalize(stocks.loc[formation_start:trading_end])
+
+        # Select formation period data   
+        stocks_formation = stocks_normalized.loc[formation_start:formation_end]
+        # Select testing data (next 6 months)
+        stocks_trading = stocks_normalized.loc[trading_start:trading_end]
+        
+        # Formation part 
+        # 2. sort by ssd ~ 1 minute
+        print("\nSorting all combinations by SSD...\n")
+        print("=" * 80)
+        pairs_sorted = calculate_and_sort_ssd(stocks_formation)
+
+        print(f"Formation Start:\n{stocks_formation.index[0]}")
+        print("X" * 80)
+
+        # 3. Select 20 cointegrated pairs 
+        print("\nSelecting cointegrated pairs using Engle-Kranger method...\n")
+        print("=" * 80)
+        portfolio = select_cointegrated_pairs(stocks_formation, pairs_sorted)
+
+        # 4. Estimate the state - observation model parameters
+        print("\nEstimating the state - observation model parameters...\n")
+        print("=" * 80)
+        portfolio_models = estimate_model(stocks_formation=stocks_formation,portfolio=portfolio)
+        
+        print(f"Formation End:\n{stocks_formation.index[-1]}")
+        print("-" * 80)
+        print(f"Trading Start:\n{stocks_trading.index[0]}")
+
+        # Trading part
+        # 5. Trade portfolio
+        print("\nPortfolio is trading...\n")
+        print("=" * 80)
+        _, _, _, result_df, trade_counts_df = trade_portfolio_kalman(portfolio_models, stocks_trading=stocks_trading, useTransactionCosts= useTransactionCosts)
+
+        print(f"Trading End:\n{stocks_trading.index[-1]}\n")
+        print("X" * 80)
+
+        # 6. Calculate daily returns of each portfolio and append this column for each trading period
+        # calculated as a row sums of the daily returns of 20 pairs 
+        # Also sum up the number trades on that day over the 6 portfolios
+        returns_dictionary[f"Portfolio_{trading_start}"] = result_df.sum(axis=1)
+        trade_counts_dictionary[f"Portfolio_{trading_start}"] = trade_counts_df.sum(axis=1)
+        n_trading_periods += 1
+        print("Number of trading periods: ", n_trading_periods, "\n transaction costs apply:" , useTransactionCosts) 
+
+    sys.stdout.close()
+    sys.stdout = sys.__stdout__
+    print("Done ... logs saved into", log_filename)
+    return pd.DataFrame(returns_dictionary), pd.DataFrame(trade_counts_dictionary)
 
 def plot_kalman(pair, x_est, y_obs, R_est, result):
     """
