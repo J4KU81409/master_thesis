@@ -1,5 +1,4 @@
 import pandas as pd 
-import matplotlib.pyplot as plt
 from cointegration_functions import * 
 from kalman_functions import *
 
