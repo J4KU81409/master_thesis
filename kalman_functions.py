@@ -119,11 +119,13 @@ def trade_portfolio_kalman(portfolio_models: pd.DataFrame, stocks_trading: pd.Da
             # trade logic here, we compare prediction and signal 
             threshold = np.sqrt(R_hat) * threshold_factor # threshold to enter the trade
             
+            # Entering trade
             if observed_y > x_hat + threshold and not entered_trade:
                 #observed spread is too large, enter trade 
                 print("Observed spread ", observed_y ," is too big, short trade entered...")
                 spread_t = observed_y
                 direction = -1
+                n_trades += 1
                 entered_trade = True
             
             elif observed_y < x_hat - threshold and not entered_trade:
@@ -131,18 +133,22 @@ def trade_portfolio_kalman(portfolio_models: pd.DataFrame, stocks_trading: pd.Da
                 print("Observed spread is too small, long trade entered...")
                 spread_t = observed_y
                 direction = +1
+                n_trades += 1
                 entered_trade = True
 
-            # if the spread at time t was higher and 
-            # current spread returns to the lower threshold, exit and save delta_spread = spread_t+n - spread_t
+            # Closing Trade
+            # current spread drops below the estimate, exit and save delta_spread = spread_t+n - spread_t
             if direction == -1 and observed_y < x_hat and entered_trade:
-                print("Short trade was exited...return is :", abs(observed_y - spread_t))    
-                entered_trade = False   # exit trade
-                delta_spread = abs(observed_y - spread_t) # return = delta spread
+                entered_trade = False  
+                spread_diff = observed_y - spread_t
+                delta_spread = direction * spread_diff
+                print("Short trade was exited...return is :", delta_spread)    
+                
             elif direction == +1 and observed_y > x_hat and entered_trade:
-                print("Long trade was exited...return is :", abs(observed_y - spread_t))    
-                entered_trade = False   # exit trade
-                delta_spread = abs(observed_y - spread_t) # return = delta spread
+                entered_trade = False 
+                spread_diff = observed_y - spread_t
+                delta_spread = direction * spread_diff
+                print("Long trade was exited...return is :", delta_spread)    
             else: 
                 # if trade is not entered or spread of the entered trade did not return to 0
                 delta_spread = 0.0 
@@ -158,16 +164,9 @@ def trade_portfolio_kalman(portfolio_models: pd.DataFrame, stocks_trading: pd.Da
                     print("Brute force close - observed vs. entry:", observed_y, spread_t)
 
                     # Determine profit/loss based on trade direction
-                    if direction == 1:  # long
-                        delta_spread = spread_diff
-                    elif direction == -1:  # short
-                        delta_spread = -spread_diff
-
+                    delta_spread = direction * spread_diff
                     print("Final delta_spread:", delta_spread)
 
-                    # Convert to absolute profit/loss value
-                    delta_spread = abs(delta_spread) if delta_spread >= 0 else -abs(delta_spread)
-                    
                     if delta_spread < 0:
                         n_diverged += 1
 
