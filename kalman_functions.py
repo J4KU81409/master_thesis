@@ -54,7 +54,7 @@ def estimate_model(stocks_formation, portfolio):
     return portfolio_models
 
 
-def trade_portfolio_kalman(portfolio_models: pd.DataFrame, stocks_trading: pd.DataFrame, useTransactionCosts: bool = False, transaction_cost: float = 0.006, threshold_factor: float = 0.1):
+def trade_portfolio_kalman(portfolio_models: pd.DataFrame, stocks_trading: pd.DataFrame, useTransactionCosts: bool = False, transaction_cost: float = 0.006, threshold_factor: float = 1.0):
     """ 
     This performs the recursive kalman filter based on the parameterss A,B,C,D state-observation model estimated before.
     Takes the trading period stocks and performs the trading algorithm 
@@ -137,14 +137,14 @@ def trade_portfolio_kalman(portfolio_models: pd.DataFrame, stocks_trading: pd.Da
                 entered_trade = True
 
             # Closing Trade
-            # current spread drops below the estimate, exit and save delta_spread = spread_t+n - spread_t
-            if direction == -1 and observed_y < x_hat and entered_trade:
+            # current spread drops below the estimate -+ threshold, exit and save delta_spread = spread_t+n - spread_t
+            if direction == -1 and observed_y < x_hat - threshold  and entered_trade:
                 entered_trade = False  
                 spread_diff = observed_y - spread_t
                 delta_spread = direction * spread_diff
                 print("Short trade was exited...return is :", delta_spread)    
                 
-            elif direction == +1 and observed_y > x_hat and entered_trade:
+            elif direction == +1 and observed_y > x_hat + threshold and entered_trade:
                 entered_trade = False 
                 spread_diff = observed_y - spread_t
                 delta_spread = direction * spread_diff
@@ -254,7 +254,10 @@ def run_strategy_kalman(stocks: pd.DataFrame, useTransactionCosts: bool = False)
         # 5. Trade portfolio
         print("\nPortfolio is trading...\n")
         print("=" * 80)
-        _, _, _, result_df, trade_counts_df = trade_portfolio_kalman(portfolio_models, stocks_trading=stocks_trading, useTransactionCosts= useTransactionCosts)
+        _, _, _, result_df, trade_counts_df = trade_portfolio_kalman(portfolio_models, 
+                                                                     stocks_trading=stocks_trading, 
+                                                                     useTransactionCosts= useTransactionCosts
+                                                                     threshold_factor = 1.0)
 
         print(f"Trading End:\n{stocks_trading.index[-1]}\n")
         print("X" * 80)
