@@ -28,6 +28,7 @@
         - How is the profitability calculated and why (industry practice), no reinvestment, brute force closing positions
     2. Cointegration Strategy vs Kalman Filter Strategy 
         - returns distribution (daily) before and after transaction costs
+        - Trade Counts for both strategies
         - cumulative return of 1$ investment into the strategy before and after transaction costs
         - (Risk adjusted) Monthly performance before and after transaction costs
         - Compare the monthly average performance before and after transaction costs
