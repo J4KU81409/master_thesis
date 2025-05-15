@@ -56,9 +56,22 @@ We use a rolling window method for stock selection and trading, where each 24 mo
 
 To form pairs, we follow a method that was used in the study of Hossein (2016) which combines the cointegration framework of (Vidyamurthy,2004) and the sum of squared differences in normalized prices. Firstly, we rank all possible combinations of stocks in our universe based on the sum of squared differences of their normalized price time series. The normalized price is calculated by dividing the whole time series by its first value, effectively scaling each stock to $1 at the beggining. 
 
-Then, we go through these pairs and select those that pass the Engle-Granger two step method to establish cointegration relationship. First, we regress the price series of first stock in the pair on the price series of the second stock. Then, if a linear relationship is established, we test the residuals using Augmented Dickey-Fuller test to check the stationarity. Since we are effectively modelling the spread in the selection period as residuals of the linear regression, we want this to be stationary to be able to profit from the temporary deviations in the equilibrium relationship. (Engle-Granger).
+Then, we go through these pairs and select those that pass the Engle-Granger two step method to establish cointegration relationship. First, we regress the price series of first stock $y_t$ of the pair on the price series of the other $x_t$, so called co-integrating regression (Engle-Granger, p. 261), 
+$$ y_t = \beta x_t + u_t$$ 
+where $u_t$ are the residuals. In second step, we test the residuals of the cointegration regression using Augmented Dickey-Fuller test, as recommended by Engle and Granger (1987, p.269), to check the stationarity. In general, the ADF test regresses the changes in residuals
+
+$$ \Delta u_t = \rho u_{t-1} + \sum_{i=1}^{p} \alpha_i \Delta u_{t-i} + \varepsilon_t$$
+
+where $\rho$ is the coefficient that is tested in $H_0: \rho = 0$, which represents non-stationarity and hence no cointegration, while the alternative is $H_1: \rho < 0$, $p$ is the number of residual lags included to ensure white noise residuals $\varepsilon_t$. 
+Since we are effectively modelling the spread in the selection period as residuals of the linear regression, we want the spread to be stationary to be able to profit from the temporary deviations in the equilibrium relationship. (Engle-Granger, p. 268-269).
 
 The pair selection methodology is the same for both strategies, ensuring that the strategies are tested on exactly the same pairs of stocks for comparability. 
 
 
 # Cointegration Strategy 
+
+Let $y_t$ and $x_t$ be the time series that are stationary after first differencing. If there exists a linear combination such that series $$y_t - \beta x_t =  u_t$$
+is stationary, then the series $y_t$ and $x_t$ are cointegrated. (Engle Granger, p.253)
+
+The central idea behind cointegration dynamics is the error correction, which means that the linear combination of two cointegrated series has a long-run equilibrium, and if there is a deviation, one or both time series changes such that the linear combination returns equilibrium. Formally, $$ 
+(Vidyamurthy, 2004, p.76)
