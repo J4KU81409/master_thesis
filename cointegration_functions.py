@@ -95,7 +95,7 @@ def select_cointegrated_pairs(stocks: pd.DataFrame, pairs: pd.DataFrame) -> pd.D
         print("\n",ols_pvalue)
        
         # if there is no linear relationship, continue
-        if ols_pvalue > 0.05 or math.isnan(ols_pvalue): 
+        if math.isnan(ols_pvalue): 
             print("NO OLS FIT...")
             continue 
         
