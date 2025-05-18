@@ -54,7 +54,7 @@ We use a rolling window method for stock selection and trading, where each 24 mo
 
 ## Pair Selection 
 
-To form pairs, we follow a method that was used in the study of Hossein (2016) which combines the cointegration framework of Vidyamurthy (2004) and the sum of squared differences (SSD) in normalized prices. Firstly, we rank all possible combinations of stocks in our universe based on the sum of squared differences of their normalized price time series, starting from the lowest value of SSD. The normalized price is calculated by dividing the whole time series by its first value, effectively scaling each stock to $1 at the beggining. 
+To form pairs, we follow a method that was used in the study of Hossein (2016) which combines the cointegration framework of Vidyamurthy (2004) and the sum of squared differences (SSD) in normalized prices (cumulative return indeces ?). Firstly, we rank all possible combinations of stocks in our universe based on the sum of squared differences of their normalized price time series, starting from the lowest value of SSD. The normalized price is calculated by dividing the whole time series by its first value, effectively scaling each stock to $1 at the beggining. 
 
 Then, we go through these pairs and select those that pass the Engle-Granger two step method to establish cointegration relationship. First, we regress the price series of first stock $y_t$ of the pair on the price series of the other $x_t$, so called co-integrating regression (Engle-Granger, p. 261), 
 $$ y_t = \beta x_t + u_t$$ 
@@ -62,29 +62,32 @@ where $u_t$ are the residuals. In second step, we test the residuals of the coin
 
 $$ \Delta u_t = \rho u_{t-1} + \sum_{i=1}^{p} \alpha_i \Delta u_{t-i} + \varepsilon_t$$
 
-where $\rho$ is the coefficient that is tested in $H_0: \rho = 0$, which represents non-stationarity and hence no cointegration, while the alternative is $H_1: \rho < 0$, $p$ is the number of residual lags included to ensure white noise residuals $\varepsilon_t$. 
+where $\rho$ is the coefficient that is tested in null hypotheses $H_0: \rho = 0$, which represents non-stationarity and therefore no cointegration, while the alternative is $H_1: \rho < 0$, $p$ is the number of residual lags included to ensure white noise residuals $\varepsilon_t$. 
 Since we are effectively modelling the spread in the selection period as residuals of the linear regression, we want the spread to be stationary to be able to profit from the temporary deviations in the equilibrium relationship. (Engle-Granger, p. 268-269).
 
-We continue testing the previously ordered list of pairs based on SSD until we select 20 pairs that are cointegrated in accordance with Hossein (2016). Thus, we have a portfolio of 20 pairs that are monitored for trading signals. The pair selection methodology is the same for both strategies, ensuring that the strategies are tested on exactly the same pairs of stocks for comparability. Where th
-
+We continue testing the previously ordered list of pairs based on SSD until we select 20 pairs that are cointegrated in accordance with Hossein (2016). Thus, we have a portfolio of 20 pairs that are monitored for trading signals. The pair selection methodology is the same for both strategies, ensuring that the strategies are tested on exactly the same pairs of stocks for comparability.
 
 ## Cointegration Strategy 
 
-Let $y_t$ and $x_t$ be the time series that are stationary after first differencing. If there exists a $\beta \neq 0 $ such that a linear combination  $$y_t - \beta x_t =  u_t$$
-is stationary, then the series $y_t$ and $x_t$ are cointegrated. (Engle Granger, p.253)
+USE LOG of prices ??? 
 
-The central idea behind cointegration dynamics is the error correction, which means that the linear combination of two cointegrated series has a long-run equilibrium, and if there is a deviation, one or both time series changes such that the linear combination returns to equilibrium. Formally, we can write $$\Delta y_t = \alpha_y (y_{t-1} - \beta x_{t-1}) + \varepsilon_{y_t}$$ 
+Let $y_t$ and $x_t$ be the time series that are stationary after first differencing. If there exists a $\beta \neq 0 $ such that a linear combination  $$y_t - \beta x_t =  u_t$$
+is stationary, then the series $y_t$ and $x_t$ are cointegrated, meaning there is long-run equilibrium relationship.  (Engle Granger, p.253) 
+
+The central idea behind cointegration dynamics is the error correction, which states that the linear combination of two cointegrated series has a long-run equilibrium and if there is a deviation, one or both time series changes such that the linear combination returns to equilibrium. We can write $$\Delta y_t = \alpha_y (y_{t-1} - \beta x_{t-1}) + \varepsilon_{y_t}$$ 
 
 $$\Delta x_t = \alpha_x (x_{t-1} - \beta y_{t-1}) + \varepsilon_{x_t}$$ 
 where $\varepsilon_{y_t}$ and $\varepsilon_{x_t}$ are the white noise processes of series $y_t$ and $x_t$, respectively. The $\alpha_y$ and $\alpha_x$ are the rates of error correction. Based on this representation, we can see that the change in the time series is consists of the error correction term which reverts the series back to its equilibrium and the white noise part. This concept can be used in implementing the pairs trading strategies.
 (Vidyamurthy, 2004, p.76)
 
-Let us now model the spread as a linear combination of two stock price series $x_t$ and $y_t$,  
-$$spread_t = y_t - \beta x_t$$
-Now, assume that we form a spread portfolio by going long in one share of stock $y$ and short selling $\beta$ shares of stock $x$. Then, the profit of this portfolio from time $t$ to time $t+1$ is calculated by $$(y_{t+1}-y_{t}) - \beta (x_{t+1}-x_{t})$$
+### Spread model
+Let us now model the spread at time $t$ as a linear combination of two normalized stock price series  $P_{1,t}$ and $P_{2,t}$,  
+$$spread_t = P_{2,t} - \beta P_{1,t}$$
+
+Now, assume that we form a spread portfolio by going long in one dollar worth of  $P_{2,t}$ and short selling $\beta$ dollar worth of stock $P_{1,t}$. Then, the profit of this portfolio from time $t$ to time $t+1$ is calculated by $$(P_{1,t+1}-P_{1,t}) - \beta (P_{2,t+1}-P_{2,t})$$
 Conveniently, this can be further rearranged, and we have 
 $$
-( y_{t+1}-  \beta x_{t+1} ) - (y_{t}-\beta x_{t}) = spread_{t+1} - spread_{t}
+( P_{2,t+1}-  \beta P_{1,t+1} ) - (P_{2,t}-\beta P_{1,t}) = spread_{t+1} - spread_{t}
 $$
 so the return of this portfolio is determined by the changes in the spread of the two stock price series. (Hossein, 2016)
 
@@ -93,38 +96,47 @@ We established the model for the spread as a linear combination of two stock pri
 $$
 spread_{norm} = \frac{spread-\mu_{spread}}{\sigma_{spread}}
 $$
-By using the normalized spread we get the sense of how the spread diverged considering its standard deviation. The trading algorithm is as follows: if the normalized spread increases above 2, we consider the stock $x$ as relatively underpriced and stock $y$ overpriced, so we buy 1 dollar stock $x$ and sell 1/$\beta$ dollar worth of stock $y$. In the other case, when normalized spread decreases below -2, we sell $\beta$ dollar worth of stock $x$ and buy 1 dollar of stock $y$. To exit the trade by closing both positions, we wait until the spread returns to its long-term equilibrium level of 0. (Hossein, 2016)
+By using the normalized spread we get the sense of how the spread diverged relative to its standard deviation. The trading algorithm is as follows: if the normalized spread increases above 2, we consider the stock $x$ as relatively underpriced and stock $y$ overpriced, so we buy 1 dollar stock $x$ and sell 1/$\beta$ dollar worth of stock $y$. In the other case, when normalized spread decreases below -2, we sell $\beta$ dollar worth of stock $x$ and buy 1 dollar of stock $y$. To exit the trade by closing both positions, we wait until the spread returns to its long-term equilibrium level of 0. (Hossein, 2016)
 
 Then, if we enter the trade at time $t$ and exit the long-short trades at time $t+1$, the return to this trade can be calculated as $spread_{t+1} - spread_t$ in the case of long direction, i.e. the normalized spread was below -2 threshold and we bet on the spread increasing. In the other case, when the normalized spread exceeds 2, we short the spread portfolio and the return is calculated as $spread_{t} - spread_{t+1}$. Note that in the case that the two underlying stocks diverge and do not converge at least to the 2 standard deviations range until the end of the 6 month trading period, we brute force close all the positions and realize a loss.
 
 ## Kalman Filter Strategy 
 
-In the cointegration strategy, we defined the spread of two securities as a linear combination of their prices, provided that it is stationary. Now, we will assume a dynamic mean reverting model for the spread, where the equilibrium level is not constant as was the case in the cointegration strategy. Moreover, we will assume that the spread follows a Ornstein-Uhlenbeck process that comes in noise, thus forming a state-observation model. 
+### Spread model
 
-Let us now define this formally according to Elliot (2005). Let the spread be a state process $x_k$ for $k = 0,1,2, \dots$ at time $t_k = k\tau$ such that 
+In the cointegration strategy, we defined the spread of two securities as stationary a linear combination of their cumulative return indeces scaled to $1 in the beginning. Now, we assume a dynamic mean reverting model for the spread, where the equilibrium level is not constant as was the case in the cointegration strategy. Moreover, we assume that the spread follows a Ornstein-Uhlenbeck process that comes in noise, thus forming a state-observation model. We define spread of two stocks at time $t$ denoted by $spread_t$ as a difference of logarithms of their normalized prices $P_{1,t}$ and $P_{2,t}$. We have $$spread_t =log(P_{2,t})-log(P_{1,t}).$$ 
+
+As with the cointegration strategy, assume we have portfolio that is long one dollar worth of stock 2 and short one dollar worth of stock 1. Then, the return to the portfolio is 
+$$ \left[ log(P_{2,t+1})-log(P_{2,t})  \right] - \left[log(P_{1,t+1})-log(P_{1,t}) \right] . $$
+This can be rearranged as
+$$ \left[ log(P_{2,t+1})-log(P_{1,t+1})  \right] -\left[log(P_{2,t})- log(P_{1,t}) \right]  = spread_{t+1} - spread_{t}. $$ 
+We see that, as is the case with cointegration strategy, the return on the spread portfolio is given by the change in the spread from $t$ to $t+1$.
+
+### Kalman Filter
+We denote the spread as $x_k$ for $k = 0,1,2, \dots$, at time $t_k = k\tau$. According to Elliot (2005), we model the spread be a state process that is mean reverting,
 $$
 x_{k+1} - x_k= (a - b x_k)\tau + \sigma\sqrt{\tau} \, \varepsilon_{k+1}$$
 
 where $ \varepsilon_k \sim \mathcal{N}(0, 1) $ is an i.i.d. standard normal random variable, $\sigma \geq 0 $, $b > 0$ and $ a \in \mathbb{R}  $
 
 Now, let $A = a\tau$, $B = 1-b\tau$ and $C=\sigma \tau$. Then, this equation can be also expressed as $$x_{k+1} = A + Bx_k + C \varepsilon_{k+1} $$
-which is convenient form of the state process Kalman filtering setup.  
+which is convenient form of the state process Kalman filtering setup. 
 
-Next we define an observation process of $x_k$ as 
+We assume that the spread is observed in  noise and define it as an observation process 
 
 $$
 y_k = x_k + D \omega_k ,
 $$
 
 where 
-where $D > 0$, $ \omega_k \sim \mathcal{N}(0, 1) $ is an i.i.d. standard normal random variable independent of $\varepsilon_k$.
-In Kalman filtering, we want to compute the best estimates of the state process given the observation process. We have 
+where $D > 0$, $ \omega_k \sim \mathcal{N}(0, 1) $ is an i.i.d. standard normal random variable independent of $\varepsilon_k$. 
+In Kalman filtering, we want to compute the best estimates of the hidden state process given the observation process. We have 
 $$
 \hat{x}_k = \mathbb{E}[x_k \mid \mathcal{Y}_k]$$ 
 where the information from observing $y_k$ is $\mathcal{Y}_k = \sigma\{y_1,y_2, \dots, y_k\}$. Let 
 $$ R_k = \mathbb{E}[(x_k-\hat{x}_k)^2 \mid \mathcal{Y}_k ].$$   
 
-Our state-observation model is defined by the following equations,
+Finally, our state-observation model is defined by the following equations,
 $$
 x_{k+1} = A + Bx_k + C \varepsilon_{k+1} 
 $$
@@ -145,4 +157,38 @@ R_{k+1|k+1} &= (1 - \mathcal{K}_{k+1}) R_{k+1|k} = D^2 \mathcal{K}_{k+1}.
 \end{aligned}
 $$
 
-Before the Kalman filtering can be applied, we need to estimate our state-observation model parameters $ \theta = (A,B,C,D)$.
+### Model Estimation 
+
+Before Kalman filtering can be applied, we need to estimate our state-observation model parameters $ \theta = (A,B,C^2,D^2)$. For this purpose, we use an Expectation Maximization algorithm based on the formulation of Dempster et al (1977, p.6). The idea is that, since we have latent unobserved variables and do not know the complete data likelihood, we maximize its expected value given the current guess for $\theta$ and observed data. 
+
+Denote our observations as $y$ and the latent variables as $x$ and let $ p(x, y \mid \theta )$ be the complete data density. Before the recursive steps, set $i = 0$ and choose $\theta^{(0)}$, then iterate the following steps:
+
+#### Step 1: Expectation Step
+Here we calculate $Q(\theta \mid \theta^{(i)})$, which is the expected complete-data log-likelihood based on the current parameter estimate and observating $y$ 
+
+$$
+Q(\theta \mid \theta^{(i)}) = \mathbb{E}_{x \mid y, \theta^{(i)}}\left[ \log p(x, y \mid \theta )\right] 
+$$
+
+#### Step 2: Maximization Step 
+In this step we update the parameter by finding $\theta^{(i+1)}$ such that the likelihood in Step 1 is maximized.
+$$
+\theta^{(i+1)} = \arg\max_{\theta} Q(\theta \mid \theta^{(i)})
+$$
+
+After sufficient number of iterations, the algorithm is shown to converge to a stationary point of the observed data log-likelihood, as shown by Dempster et al. (1977, Section 3, p.6)
+
+### Trading Algorithm
+
+Consistently with the cointegration strategy, we apply the same stock selection methodology for the Kalman Filter strategy. We first nominate 20 pairs that are marked as cointegrated and use the 24 month stock selection period as a learning period, where we estimate the parameters  $ \theta = (A,B,C^2,D^2)$ of our state-observation model using the EM algorithm. Then, after the learning period concludes, we switch to trading period, where the 20 nominated pairs are monitored for trading opportunities, which are based on the Kalman Filter estimates. 
+
+At each time step $k$ (day in our case), we have 
+$$
+\hat{x}_k = \mathbb{E}[x_k \mid \mathcal{Y}_k] $$ 
+$$ R_k = \mathbb{E}[(x_k-\hat{x}_k)^2 \mid \mathcal{Y}_k ] $$
+
+and the corresponding estimates $\hat{x}_{k+1|k+1}$ and $R_{k+1|k+1}$ from the Kalman Filter algorithm. As we observe the spread $y_{k+1}$ on the next day, we can compare it to the predicted filtered level of the hidden state process $\hat{x}_{k+1|k+1}$ and determine if the observed spread is too large or small. We also set a treshold that needs to be exceeded for entering the trade as $\pm \sqrt{R_{k+1|k+1}}$ around the hidden process state value $\hat{x}_{k+1|k+1}$.
+
+We implement the following trading rules for the 6 month trading window. If $$y_{k+1} > \hat{x}_{k+1|k+1} + \sqrt{R_{k+1|k+1}} $$, the observed spread is too large, so we short the spread portfolio hoping a correction will occur. Consistent with our model for the spread, $spread_t =log(P_{2,t})-log(P_{1,t})$, this means we sell the relatively overpriced stock 2 and buy the underpriced stock 1. Otherwise, if  $$y_{k+1} < \hat{x}_{k+1|k+1} - \sqrt{R_{k+1|k+1}} $$, the spread is too small and we go long in the spread portfolio. 
+
+For the trade exits, we use the logic proposed by Vidyamurthy (2004, p.198), that treats the error standard deviations of the filtered estimates $\pm \sqrt{R_{k+1|k+1}}$ as bollinger bands. That is, we enter trade when we exceed any of the thresholds, and exit the trade when the observed spread crosses back through the opposite threshold, depending on the direction of the trade. For long short trade signal, we exit when the spread corrects sufficiently, $y_{k+1} < \hat{x}_{k+1|k+1} - \sqrt{R_{k+1|k+1}}, $ and for short trade signal, we exit when $y_{k+1} > \hat{x}_{k+1|k+1} + \sqrt{R_{k+1|k+1}} $.
