@@ -20,10 +20,14 @@ def estimate_model(stocks_formation, portfolio):
         
         stock1, stock2 = pair.split("_")
         print("processing pair ", stock1, "and", stock2)
-    
-        # Spread= logP2 - logP1
-        y_obs = np.log(stocks_formation[stock1]/stocks_formation[stock2])
 
+        data = pd.concat([stocks_formation[stock1], stocks_formation[stock2]], axis=1).dropna()  # Drop NaN values
+        x = data[stock1]  # No sm.add_constant()
+        y = data[stock2]
+        
+        model = sm.OLS(y,x).fit()
+        y_obs = pd.Series(model.resid) #spread = P2 - beta * P1. 
+        
         # Define the Kalman Filter
         kf = KalmanFilter(
             n_dim_obs=1, 
@@ -48,7 +52,8 @@ def estimate_model(stocks_formation, portfolio):
         portfolio_models.loc[pair, "B"] = B_est.item()
         portfolio_models.loc[pair, "C"] = C_est.item()
         portfolio_models.loc[pair, "D"] = D_est.item()
-        print("params of the spread for :", pair, "are ", A_est.item(), B_est.item(), C_est.item(), D_est.item())
+        portfolio_models.loc[pair, "beta"] = model.params.iloc[0]
+        print("params of the spread for :", pair, "are ", A_est.item(), B_est.item(), C_est.item(), D_est.item(), model.params.iloc[0])
       
         
     return portfolio_models
@@ -74,10 +79,10 @@ def trade_portfolio_kalman(portfolio_models: pd.DataFrame, stocks_trading: pd.Da
         stock1, stock2 = pair.split("_")
 
         print("proccesing pair: \n",  pair, "\n", 100*"-")
-        A,B,C,D = portfolio_models.loc[pair]
+        A,B,C,D,beta = portfolio_models.loc[pair]
        
-        # spread for a given pair
-        y_obs = np.log(stocks_trading[stock1]/stocks_trading[stock2])
+        # Spread for a given pair 
+        y_obs = stocks_trading[stock2] - beta * stocks_trading[stock1]
        
         # x0 = y0 
         x_est = [y_obs.iloc[0]]  
