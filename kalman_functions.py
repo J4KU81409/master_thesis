@@ -10,7 +10,7 @@ from cointegration_functions import *
 def estimate_model(stocks_formation, portfolio):
     """
     Parameters: should be portfolio and stocks formation, 
-    Y observed is defined as logx1 - logx2.
+    Y observed is defined as spread = P2 - beta * P1
     Takes formation period spread (= observed y) and learns the parameters of the state-observation model (A,B,C,D) using EM algorithm.
     Estimates the model for each pair of the trading portfolio in the formation period.
     """
@@ -81,7 +81,7 @@ def trade_portfolio_kalman(portfolio_models: pd.DataFrame, stocks_trading: pd.Da
         print("proccesing pair: \n",  pair, "\n", 100*"-")
         A,B,C,D,beta = portfolio_models.loc[pair]
        
-        # Spread for a given pair 
+        # Spread for a given pair , spread = P2 - beta * P1
         y_obs = stocks_trading[stock2] - beta * stocks_trading[stock1]
        
         # x0 = y0 
@@ -191,7 +191,6 @@ def trade_portfolio_kalman(portfolio_models: pd.DataFrame, stocks_trading: pd.Da
 
     return x_est_df, y_obs_df, R_est_df, result_df, trade_counts_df
 
-
 def run_strategy_kalman(stocks: pd.DataFrame, useTransactionCosts: bool = False):
     
     os.makedirs("logs", exist_ok=True)
@@ -259,10 +258,9 @@ def run_strategy_kalman(stocks: pd.DataFrame, useTransactionCosts: bool = False)
         # 5. Trade portfolio
         print("\nPortfolio is trading...\n")
         print("=" * 80)
-        _, _, _, result_df, trade_counts_df = trade_portfolio_kalman(portfolio_models, 
-                                                                     stocks_trading=stocks_trading, 
-                                                                     useTransactionCosts= useTransactionCosts
-                                                                     threshold_factor = 1.0)
+        _, _, _, result_df, trade_counts_df = trade_portfolio_kalman(portfolio_models, stocks_trading=stocks_trading,
+                                                                      useTransactionCosts= useTransactionCosts,
+                                                                        threshold_factor=1.0)
 
         print(f"Trading End:\n{stocks_trading.index[-1]}\n")
         print("X" * 80)
@@ -280,39 +278,94 @@ def run_strategy_kalman(stocks: pd.DataFrame, useTransactionCosts: bool = False)
     print("Done ... logs saved into", log_filename)
     return pd.DataFrame(returns_dictionary), pd.DataFrame(trade_counts_dictionary)
 
-def plot_kalman(pair, x_est, y_obs, R_est, result):
+
+def plot_spread_signals_kalman(pair, x_est, y_obs, R_est, tf):
     """
-    Plot Kalman Filter spread for on portfolio pair estimate with ±1σ bands.
-    
+    Plot Kalman Filter spread for a portfolio pair with ±1σ bands and crossover trading signals.
+
     Parameters:
         pair (str): Name of the spread column to visualize, e.g., "AEP_PCG"
         x_est (DataFrame): Kalman filtered estimate of the spread
         y_obs (DataFrame): Observed spread values
         R_est (DataFrame): Estimated variance 
+        result (DataFrame): Residuals or strategy returns
+        tf (float): Threshold factor (number of standard deviations for the band)
     """
-    # Compute upper and lower 1σ bands
-    upper_band = x_est[pair] + np.sqrt(R_est[pair].values)
-    lower_band = x_est[pair] - np.sqrt(R_est[pair].values)
-    # Compute residuals
-    returns = result[pair]
-    # Indices where residuals are non-zero
-    nonzero_mask = returns != 0
-    pos_mask = (returns > 0) & nonzero_mask
-    neg_mask = (returns < 0) & nonzero_mask
+    # Compute bands
+    upper_band = x_est[pair] + np.sqrt(R_est[pair].values) * tf
+    lower_band = x_est[pair] - np.sqrt(R_est[pair].values) * tf
+
+    # Track trades
+    long_entry_dates, long_entry_prices = [], []
+    long_exit_dates, long_exit_prices = [], []
+    short_entry_dates, short_entry_prices = [], []
+    short_exit_dates, short_exit_prices = [], []
+
+    trade_active = False
+    trade_type = None  # 'long' or 'short'
+
+    for i in range(len(y_obs)):
+        y_val = y_obs[pair].iloc[i]
+        x_val = x_est[pair].iloc[i]
+        upper = upper_band.iloc[i]
+        lower = lower_band.iloc[i]
+        idx = y_obs.index[i]
+
+        if not trade_active:
+            if y_val > upper:
+                # Short entry
+                trade_active = True
+                trade_type = 'short'
+                short_entry_dates.append(idx)
+                short_entry_prices.append(y_val)
+            elif y_val < lower:
+                # Long entry
+                trade_active = True
+                trade_type = 'long'
+                long_entry_dates.append(idx)
+                long_entry_prices.append(y_val)
+        else:
+            if trade_type == 'short' and y_val < lower:
+                # Exit short
+                trade_active = False
+                trade_type = None
+                short_exit_dates.append(idx)
+                short_exit_prices.append(y_val)
+            elif trade_type == 'long' and y_val > upper:
+                # Exit long
+                trade_active = False
+                trade_type = None
+                long_exit_dates.append(idx)
+                long_exit_prices.append(y_val)
+        
+        # Last day 
+        if i == len(y_obs) - 1:
+            if trade_type == 'short':
+                short_exit_dates.append(idx)
+                short_exit_prices.append(y_val)
+            if trade_type == 'long':
+                long_exit_dates.append(idx)
+                long_exit_prices.append(y_val)
+            
+
     # Plotting
     plt.figure(figsize=(12, 6))
     plt.scatter(y_obs[pair].index, y_obs[pair].values, label='Observed Spread', color='red', s=4)
     plt.plot(x_est[pair].index, x_est[pair].values, label='Filtered Spread (Kalman)', color='blue', linestyle='--')
     plt.fill_between(x_est[pair].index, lower_band, upper_band, color='gray', alpha=0.3, label='±1σ Band')
-    # Plot residual markers
-    plt.scatter(returns.index[pos_mask], y_obs[pair][pos_mask], marker='x', color='green', label='Return')
-    plt.scatter(returns.index[neg_mask], y_obs[pair][neg_mask], marker='x', color='red', label='Loss')
+
+    # Mark entries and exits
+    plt.scatter(long_entry_dates, long_entry_prices, color='green', marker='^', s=80, label='Long Entry')
+    plt.scatter(long_exit_dates, long_exit_prices, color='darkgreen', marker='v', s=80, label='Long Exit')
+
+    plt.scatter(short_entry_dates, short_entry_prices , color='red', marker='v', s=80, label='Short Entry')
+    plt.scatter(short_exit_dates, short_exit_prices, color='red', marker='^', s=80, label='Short Exit')
+
     # Formatting
-    plt.title(f'Kalman Filter Estimate for {pair}', fontsize=14)
+    #plt.title(f'Kalman Filter Estimate with Crossover Trade Signals for {pair}', fontsize=14)
     plt.xlabel('Date', fontsize=12)
     plt.ylabel('Spread', fontsize=12)
-    #plt.legend(loc='upper right', fontsize=10)
+    plt.legend(loc='upper right', fontsize=8)
     plt.grid(True, linestyle='--', alpha=0.5)
     plt.tight_layout()
     plt.show()
-

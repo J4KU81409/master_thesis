@@ -65,7 +65,7 @@ def select_cointegrated_pairs(stocks: pd.DataFrame, pairs: pd.DataFrame) -> pd.D
     be traded for the next 6 months.
 
     Parameters: 
-    stocks: normalized stocks dataframe, a 12 month subset (formation period)  with a date column as an index
+    stocks: normalized stocks dataframe, a 24 month subset (formation period)  with a date column as an index
     pairs: all possible pairs ordered by ssd
 
     Returns: 
@@ -152,14 +152,16 @@ def calculate_portfolio_spread(stocks: pd.DataFrame, portfolio: pd.DataFrame) ->
         # Extract the tickes 
         stock1, stock2 = pair.split("_")   
              
-        # Calculate spread series using beta 
+        # Calculate spread series using beta, spread = P2 - beta * P1. 
         spread = stocks[stock2] - beta * stocks[stock1]
+        
         spread_normalized = (spread - mean) / sd
 
         spread_df[pair] = spread
         spread_df_normalized[pair] = spread_normalized
 
     return spread_df, spread_df_normalized
+
 import sys
 import os
 from datetime import datetime
@@ -332,7 +334,6 @@ def run_strategy_hossein(stocks: pd.DataFrame, useTransactionCosts: bool = False
 
         # 6. Calculate daily returns of each portfolio and append this column for each trading period
         # calculated as a row sums of the daily returns of 20 pairs 
-        # Also sum up the number trades on that day over the 6 portfolios
         returns_dictionary[f"Portfolio_{trading_start}"] = result_df.sum(axis=1)
         trade_counts_dictionary[f"Portfolio_{trading_start}"] = trade_counts_df.sum(axis=1)
         n_trading_periods += 1
@@ -342,3 +343,83 @@ def run_strategy_hossein(stocks: pd.DataFrame, useTransactionCosts: bool = False
     sys.stdout = sys.__stdout__
     print("Done ... logs saved into", log_filename)    
     return pd.DataFrame(returns_dictionary), pd.DataFrame(trade_counts_dictionary)
+
+def plot_spread_signals(spread_df, pair, std_multiplier=2):
+    
+    spread = spread_df[pair]
+    # Compute bands
+    upper_band = std_multiplier
+    lower_band = -std_multiplier
+
+    # Track trades
+    long_entry_dates, long_entry_prices = [], []
+    long_exit_dates, long_exit_prices = [], []
+    short_entry_dates, short_entry_prices = [], []
+    short_exit_dates, short_exit_prices = [], []
+
+    trade_active = False
+    trade_type = None  # 'long' or 'short'
+
+    for i in range(len(spread)):
+        y_val = spread.iloc[i]
+        idx = spread.index[i]
+
+        if not trade_active:
+            if y_val > upper_band:
+                # Short entry
+                trade_active = True
+                trade_type = 'short'
+                short_entry_dates.append(idx)
+                short_entry_prices.append(y_val)
+            elif y_val < lower_band:
+                # Long entry
+                trade_active = True
+                trade_type = 'long'
+                long_entry_dates.append(idx)
+                long_entry_prices.append(y_val)
+        else:
+            if trade_type == 'short' and y_val < 0:
+                # Exit short
+                trade_active = False
+                trade_type = None
+                short_exit_dates.append(idx)
+                short_exit_prices.append(y_val)
+            elif trade_type == 'long' and y_val > 0:
+                # Exit long
+                trade_active = False
+                trade_type = None
+                long_exit_dates.append(idx)
+                long_exit_prices.append(y_val)
+        
+        # Last day 
+        if i == len(spread) - 1:
+            if trade_type == 'short':
+                short_exit_dates.append(idx)
+                short_exit_prices.append(y_val)
+            if trade_type == 'long':
+                short_exit_dates.append(idx)
+                short_exit_prices.append(y_val)
+            
+
+    # Plotting
+    plt.figure(figsize=(12, 6))
+    plt.plot(spread, label=f'{pair} Spread', color='blue')
+    plt.axhline(std_multiplier, color='red', linestyle='--', label=f'+{std_multiplier}σ')
+    plt.axhline(0, color='black', linestyle='-', label='Mean')
+    plt.axhline(-std_multiplier, color='red', linestyle='--', label=f'-{std_multiplier}σ')
+
+    # Mark entries and exits
+    plt.scatter(long_entry_dates, long_entry_prices, color='green', marker='^', s=80, label='Long Entry')
+    plt.scatter(long_exit_dates, long_exit_prices, color='darkgreen', marker='v', s=80, label='Long Exit')
+
+    plt.scatter(short_entry_dates, short_entry_prices, color='red', marker='v', s=80, label='Short Entry')
+    plt.scatter(short_exit_dates, short_exit_prices, color='red', marker='^', s=80, label='Short Exit')
+    
+   
+    #plt.title(f'Kalman Filter Estimate with Crossover Trade Signals for {pair}', fontsize=14)
+    plt.xlabel('Date', fontsize=12)
+    plt.ylabel('Spread', fontsize=12)
+    plt.legend(loc='upper right', fontsize=8)
+    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    plt.show()
