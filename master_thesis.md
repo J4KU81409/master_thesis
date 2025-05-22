@@ -207,3 +207,12 @@ In the study of robustness of PTS to transaction costs by Do and Faff (2011), th
 Frazzini et al (2018) look at the sample period from 1998 to 2016 and differentiate between transaction costs for the different order types that comprise the complete round trip pairs trade. They estimate a transaction cost for Buy Long order type of 11.72 bps; for Buy Cover 15.33 bps; for Sell Long 15.35 bps; and for Sell Short 16.42 bps. These values are for Large Cap stocks, consistent with our stock universe comprising of S&P 500 stocks. Together these 4 trades add up to around 59 bps, which is close to the estimate of Do and Faff (2011) of 66 bps. 
 
 Finally, we assume a constant transaction cost of 60 bps per complete round-trip pairs trade for the whole time period.
+
+# Results 
+
+## Return calculation 
+
+
+In accordance with Hossein et al. (2016) we use a return on commited capital $RCC_m$, as a measure of performance, $$ RCC_m = \frac{\sum_{i=1}^{n}r_i}{20},$$ where $r_i$ are returns on traded pairs for month $m$; $n$ is the number of traded pairs that month. Since this measure takes into account the opportinity cost from allocating the capital for pairs trading, we divide by the number of nominated pairs for each portfolio. 
+
+Because there are 6 portfolios trading simultaneously, the monthly excess return is defined as equally weighted average return over these 6 portfolios.
